@@ -152,7 +152,7 @@ public class TestArrowReaderWriter {
 
             // 从输出流读取到的readSchema和初始定义的schema应该是一样的
             assertEquals(schema, readSchema);
-            // batch只有一个（没有调用for循环之类的给writer循环赋输出流），因此size等于1
+            // 每次读一个RB，第一个RecordBlocks记载schema
             List<ArrowBlock> recordBatches = reader.getRecordBlocks();
             assertEquals(1, recordBatches.size());
 

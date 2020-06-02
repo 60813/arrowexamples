@@ -62,8 +62,7 @@ public class TestVectorSchemaRootAndIPC {
 
         System.out.println("bitVector: " + bitVector);
         System.out.println("varCharVector: " + varCharVector);
-        bitVector.close();
-        varCharVector.close();
+
 
         //流水线写进输出流
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -71,31 +70,48 @@ public class TestVectorSchemaRootAndIPC {
                 /*DictionaryProvider=*/provider, Channels.newChannel(out));
 
         writer.start();
+
         //写第一个batch
         writer.writeBatch();
+
         //写另外四个batch
         for(int i=0;i<4;i++) {
-            //生成VectorSchemaRoot数据和写第二个batch
+            //填充VectorSchemaRoot数据
             BitVector childVector1 = (BitVector)root.getVector(0);
             VarCharVector childVector2 = (VarCharVector)root.getVector(1);
             System.out.println("childVector1: " + childVector1);
             System.out.println("childVector2: " + childVector2);
-            childVector1.reset();
-            childVector2.reset();
+            childVector1.reset(); //清空
+            childVector2.reset(); //清空
             writer.writeBatch();
         }
 
         //end
         writer.end();
 
-        //需要在writeBatch之前生成数据，因此之后的batches可以重写之前的batches
-        //ByteArrayOutputStream包含完整的流（内含5个记录batches），可用ArrowStreamReader读这个流
-        //含有reader的VectorSchemaRoot会用loadNextBatch()加载到每一次的新的值
+        bitVector.close();
+        varCharVector.close();
+
+        /*
+        请注意，由于writer中的VectorSchemaRoot是可以容纳RB的容器，
+        因此RB作为管道的一部分流经VectorSchemaRoot，
+        因此我们需要在writeBatch之前填充数据，
+        以便以后的RB可以覆盖之前的RB。
+        现在，ByteArrayOutputStream包含完整的流，该流包含5个RB。
+        我们可以使用ArrowStreamReader读取这样的流，
+        请注意，每次调用loadNextBatch（）时，
+        阅读器中的VectorSchemaRoot都会加载新值。
+         */
+
         try(ArrowStreamReader reader = new ArrowStreamReader(new ByteArrayInputStream(out.toByteArray()), allocator)) {
             Schema schema = reader.getVectorSchemaRoot().getSchema();
             for(int i=0;i<5;i++) {
                 //每一次调用loadNextBatch会加载到新的值
                 VectorSchemaRoot readBatch = reader.getVectorSchemaRoot();
+                System.out.println("readBatch.getSchema: " + readBatch.getSchema());
+                System.out.println("readBatch.getFieldVectors: " + readBatch.getFieldVectors());
+                System.out.println("readBatch.getRowCount: " + readBatch.getRowCount());
+                System.out.println("readBatch.contentToTSVString: " + readBatch.contentToTSVString());
                 reader.loadNextBatch();
             }
         }
